@@ -5,6 +5,7 @@
 
 node_modules/
 dist/
+supabase/.temp/
 
 *.log
 npm-debug.log*

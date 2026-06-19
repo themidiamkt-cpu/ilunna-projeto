@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { PRODUCT_MARKUP } from '@/hooks/useProdutos'
+import { useToast } from '@/components/ui/use-toast'
 import type { KitItemComProduto } from '@/types/database.types'
 
 export type { KitItemComProduto }
@@ -11,7 +12,7 @@ export function useKitItens(kitId: string | null) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('kit_itens')
-        .select('*, produtos(id, nome, sku, custo_producao)')
+        .select('*, produtos:produtos!kit_itens_produto_id_fkey(id, nome, sku, custo_producao)')
         .eq('kit_id', kitId!)
         .order('created_at')
       if (error) throw error
@@ -23,6 +24,8 @@ export function useKitItens(kitId: string | null) {
 
 export function useSaveKitItens() {
   const qc = useQueryClient()
+  const { toast } = useToast()
+
   return useMutation({
     mutationFn: async ({
       kitId,
@@ -77,6 +80,13 @@ export function useSaveKitItens() {
       qc.invalidateQueries({ queryKey: ['kit_itens', kitId] })
       qc.invalidateQueries({ queryKey: ['produtos'] })
       qc.invalidateQueries({ queryKey: ['produto', kitId] })
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Erro ao salvar produtos do kit',
+        description: error.message,
+        variant: 'destructive',
+      })
     },
   })
 }
