@@ -12,6 +12,7 @@ import type { Insumo } from '@/types/database.types'
 import { formatCurrency, formatNumber } from '@/lib/utils'
 import { InsumoDialog } from './InsumoDialog'
 import { EntradaInsumoDialog } from './EntradaInsumoDialog'
+import { InsumoReceitaEditor } from './InsumoReceitaEditor'
 
 const TIPO_LABELS: Record<string, string> = {
   liquido: 'Líquido', solido: 'Sólido', embalagem: 'Embalagem', acessorio: 'Acessório',
@@ -27,6 +28,7 @@ export default function Insumos() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editInsumo, setEditInsumo] = useState<Insumo | null>(null)
   const [entradaInsumo, setEntradaInsumo] = useState<Insumo | null>(null)
+  const [receitaInsumo, setReceitaInsumo] = useState<Insumo | null>(null)
 
   const { data: insumos = [], isLoading } = useInsumos()
 
@@ -146,6 +148,9 @@ export default function Insumos() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-1 justify-end">
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-ilunna-muted hover:text-ilunna-terracotta" title="Receita do insumo" onClick={() => setReceitaInsumo(ins)}>
+                        <FlaskConical className="w-3.5 h-3.5" />
+                      </Button>
                       <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-ilunna-muted hover:text-green-600" title="Registrar entrada" onClick={() => setEntradaInsumo(ins)}>
                         <ArrowDownToLine className="w-3.5 h-3.5" />
                       </Button>
@@ -163,6 +168,7 @@ export default function Insumos() {
 
       <InsumoDialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditInsumo(null) }} insumo={editInsumo} />
       {entradaInsumo && <EntradaInsumoDialog open={!!entradaInsumo} onOpenChange={(open) => { if (!open) setEntradaInsumo(null) }} insumo={entradaInsumo} />}
+      {receitaInsumo && <InsumoReceitaEditor open={!!receitaInsumo} onOpenChange={(open) => { if (!open) setReceitaInsumo(null) }} insumo={receitaInsumo} />}
     </div>
   )
 }

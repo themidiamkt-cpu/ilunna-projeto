@@ -38,6 +38,12 @@ export interface Database {
         Update: { id?: string; nome?: string; tipo?: "liquido" | "solido" | "embalagem" | "acessorio"; unidade?: "ml" | "gr" | "un"; volume_compra?: number; custo_compra?: number; custo_unitario?: number; estoque_atual?: number; estoque_minimo?: number; fornecedor?: string | null; ativo?: boolean; updated_at?: string }
         Relationships: []
       }
+      insumo_composicoes: {
+        Row: { id: string; insumo_id: string; componente_insumo_id: string; quantidade: number; custo_linha: number; created_at: string; updated_at: string }
+        Insert: { id?: string; insumo_id: string; componente_insumo_id: string; quantidade?: number; custo_linha?: number }
+        Update: { id?: string; insumo_id?: string; componente_insumo_id?: string; quantidade?: number; custo_linha?: number; updated_at?: string }
+        Relationships: []
+      }
       produtos: {
         Row: { id: string; nome: string; sku: string | null; tipo: "simples" | "producao" | "kit"; categoria_id: string | null; preco_venda: number; custo_producao: number; margem_valor: number | null; margem_percentual: number | null; estoque_atual: number; estoque_minimo: number; validade_dias: number | null; imagem_url: string | null; ativo: boolean; created_at: string; updated_at: string }
         Insert: { id?: string; nome: string; sku?: string | null; tipo?: "simples" | "producao" | "kit"; categoria_id?: string | null; preco_venda?: number; custo_producao?: number; estoque_atual?: number; estoque_minimo?: number; validade_dias?: number | null; imagem_url?: string | null; ativo?: boolean }
@@ -154,6 +160,7 @@ export type Views<T extends keyof Database["public"]["Views"]> = Database["publi
 
 export type Categoria = Tables<"categorias">
 export type Insumo = Tables<"insumos">
+export type InsumoComposicao = Tables<"insumo_composicoes">
 export type Produto = Tables<"produtos">
 export type FichaTecnica = Tables<"fichas_tecnicas">
 export type Caixa = Tables<"caixas">
@@ -175,6 +182,10 @@ export type ProdutoComCategoria = Produto & {
 
 export type FichaTecnicaComInsumo = FichaTecnica & {
   insumos: { id: string; nome: string; unidade: string; custo_unitario: number } | null
+}
+
+export type InsumoComposicaoComComponente = InsumoComposicao & {
+  componente: { id: string; nome: string; unidade: string; custo_unitario: number } | null
 }
 
 export type KitItem = Tables<"kit_itens">
