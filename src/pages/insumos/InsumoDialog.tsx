@@ -81,7 +81,8 @@ export function InsumoDialog({ open, onOpenChange, insumo }: InsumoDialogProps) 
   const updateInsumo = useUpdateInsumo()
   const saveComposicao = useSaveInsumoComposicao()
   const { data: insumos = [] } = useInsumos()
-  const { data: composicao = [] } = useInsumoComposicao(insumo?.id ?? null)
+  const { data: composicaoData } = useInsumoComposicao(insumo?.id ?? null)
+  const composicao = composicaoData ?? []
   const isEditing = !!insumo
   const [composicaoRows, setComposicaoRows] = useState<ComposicaoRow[]>([])
 
@@ -141,18 +142,18 @@ export function InsumoDialog({ open, onOpenChange, insumo }: InsumoDialogProps) 
   }, [open, insumo, form])
 
   useEffect(() => {
-    if (!open) return
-    if (insumo) {
-      setComposicaoRows(
-        composicao.map((item) => ({
-          componente_insumo_id: item.componente_insumo_id,
-          quantidade: item.quantidade,
-        }))
-      )
-    } else {
-      setComposicaoRows([])
-    }
-  }, [composicao, insumo, open])
+    if (open && !insumo) setComposicaoRows([])
+  }, [insumo, open])
+
+  useEffect(() => {
+    if (!open || !insumo) return
+    setComposicaoRows(
+      composicao.map((item) => ({
+        componente_insumo_id: item.componente_insumo_id,
+        quantidade: item.quantidade,
+      }))
+    )
+  }, [composicaoData, insumo, open])
 
   function addComponente() {
     setComposicaoRows((rows) => [...rows, { componente_insumo_id: '', quantidade: 1 }])
