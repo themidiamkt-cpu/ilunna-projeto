@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -28,9 +28,13 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { Plus, Trash2 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import {
   useCreateInsumo,
+  useInsumoComposicao,
+  useInsumos,
+  useSaveInsumoComposicao,
   useUpdateInsumo,
   type InsumoFormData,
 } from '@/hooks/useInsumos'
@@ -49,6 +53,7 @@ const schema = z.object({
 })
 
 type FormValues = z.infer<typeof schema>
+type ComposicaoRow = { componente_insumo_id: string; quantidade: number }
 
 interface InsumoDialogProps {
   open: boolean
@@ -69,10 +74,16 @@ const unidadeLabels: Record<string, string> = {
   un: 'un (unidade)',
 }
 
+const NONE = '__none__'
+
 export function InsumoDialog({ open, onOpenChange, insumo }: InsumoDialogProps) {
   const createInsumo = useCreateInsumo()
   const updateInsumo = useUpdateInsumo()
+  const saveComposicao = useSaveInsumoComposicao()
+  const { data: insumos = [] } = useInsumos()
+  const { data: composicao = [] } = useInsumoComposicao(insumo?.id ?? null)
   const isEditing = !!insumo
+  const [composicaoRows, setComposicaoRows] = useState<ComposicaoRow[]>([])
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -91,7 +102,13 @@ export function InsumoDialog({ open, onOpenChange, insumo }: InsumoDialogProps) 
 
   const volumeCompra = form.watch('volume_compra')
   const custoCompra = form.watch('custo_compra')
-  const custoUnitario = volumeCompra > 0 ? custoCompra / volumeCompra : 0
+  const componentesDisponiveis = insumos.filter((item) => item.id !== insumo?.id && item.ativo)
+  const custoComposicao = composicaoRows.reduce((total, row) => {
+    const componente = componentesDisponiveis.find((item) => item.id === row.componente_insumo_id)
+    return total + row.quantidade * (componente?.custo_unitario ?? 0)
+  }, 0)
+  const custoBase = composicaoRows.length > 0 ? custoComposicao : custoCompra
+  const custoUnitario = volumeCompra > 0 ? custoBase / volumeCompra : 0
 
   useEffect(() => {
     if (open) {
@@ -123,25 +140,64 @@ export function InsumoDialog({ open, onOpenChange, insumo }: InsumoDialogProps) 
     }
   }, [open, insumo, form])
 
+  useEffect(() => {
+    if (!open) return
+    if (insumo) {
+      setComposicaoRows(
+        composicao.map((item) => ({
+          componente_insumo_id: item.componente_insumo_id,
+          quantidade: item.quantidade,
+        }))
+      )
+    } else {
+      setComposicaoRows([])
+    }
+  }, [composicao, insumo, open])
+
+  function addComponente() {
+    setComposicaoRows((rows) => [...rows, { componente_insumo_id: '', quantidade: 1 }])
+  }
+
+  function removeComponente(index: number) {
+    setComposicaoRows((rows) => rows.filter((_, idx) => idx !== index))
+  }
+
+  function updateComponente(index: number, field: keyof ComposicaoRow, value: string | number) {
+    setComposicaoRows((rows) => rows.map((row, idx) => idx === index ? { ...row, [field]: value } : row))
+  }
+
   async function onSubmit(values: FormValues) {
+    const composicaoValida = composicaoRows.filter((row) => row.componente_insumo_id && row.quantidade > 0)
+    const custoCompraFinal = composicaoValida.length > 0 ? custoComposicao : values.custo_compra
     const data: InsumoFormData = {
       ...values,
+      custo_compra: custoCompraFinal,
       fornecedor: values.fornecedor || undefined,
     }
 
+    let savedId = insumo?.id
     if (isEditing && insumo) {
       await updateInsumo.mutateAsync({ id: insumo.id, formData: data })
     } else {
-      await createInsumo.mutateAsync(data)
+      const novo = await createInsumo.mutateAsync(data)
+      savedId = novo.id
+    }
+
+    if (savedId && (composicaoRows.length > 0 || composicao.length > 0)) {
+      await saveComposicao.mutateAsync({
+        insumoId: savedId,
+        volumeCompra: values.volume_compra,
+        items: composicaoValida,
+      })
     }
     onOpenChange(false)
   }
 
-  const isPending = createInsumo.isPending || updateInsumo.isPending
+  const isPending = createInsumo.isPending || updateInsumo.isPending || saveComposicao.isPending
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-display text-ilunna-dark">
             {isEditing ? 'Editar Insumo' : 'Novo Insumo'}
@@ -255,6 +311,70 @@ export function InsumoDialog({ open, onOpenChange, insumo }: InsumoDialogProps) 
               <span className="text-sm font-semibold text-ilunna-terracotta">
                 {formatCurrency(custoUnitario)}
               </span>
+            </div>
+
+            {/* Composicao */}
+            <div className="rounded-lg border border-ilunna-light p-3 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-ilunna-dark">Composição do insumo</p>
+                  <p className="text-xs text-ilunna-muted">Use quando este insumo é feito com outros insumos.</p>
+                </div>
+                <Button type="button" size="sm" variant="outline" className="h-8 gap-1" onClick={addComponente}>
+                  <Plus className="w-3.5 h-3.5" /> Adicionar
+                </Button>
+              </div>
+
+              {composicaoRows.length > 0 && (
+                <div className="rounded-md bg-ilunna-light/70 px-3 py-2 flex items-center justify-between text-sm">
+                  <span className="text-ilunna-muted">Custo pela composição</span>
+                  <span className="font-semibold text-ilunna-terracotta">{formatCurrency(custoComposicao)}</span>
+                </div>
+              )}
+
+              {composicaoRows.map((row, index) => {
+                const componente = componentesDisponiveis.find((item) => item.id === row.componente_insumo_id)
+                const custoLinha = row.quantidade * (componente?.custo_unitario ?? 0)
+
+                return (
+                  <div key={index} className="grid grid-cols-[1fr_100px_86px_32px] gap-2 items-center">
+                    <Select
+                      value={row.componente_insumo_id || NONE}
+                      onValueChange={(value) => updateComponente(index, 'componente_insumo_id', value === NONE ? '' : value)}
+                    >
+                      <SelectTrigger className="text-sm">
+                        <SelectValue placeholder="Selecionar insumo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NONE}>Selecionar...</SelectItem>
+                        {componentesDisponiveis.map((item) => (
+                          <SelectItem key={item.id} value={item.id}>
+                            {item.nome} ({item.unidade})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.001"
+                      value={row.quantidade}
+                      onChange={(event) => updateComponente(index, 'quantidade', parseFloat(event.target.value) || 0)}
+                      className="text-sm"
+                    />
+                    <span className="text-xs text-ilunna-muted text-right">{formatCurrency(custoLinha)}</span>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 text-ilunna-muted hover:text-red-500"
+                      onClick={() => removeComponente(index)}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                )
+              })}
             </div>
 
             {/* Estoque */}
