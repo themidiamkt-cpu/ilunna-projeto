@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Calculator, Plus, Pencil, FlaskConical, Package, TrendingDown } from 'lucide-react'
+import { Calculator, Plus, Pencil, Copy, Trash2, FlaskConical, Package, TrendingDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { PRODUCT_MARKUP, useApplyProductMarkup, useProdutos } from '@/hooks/useProdutos'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { PRODUCT_MARKUP, useApplyProductMarkup, useDeleteProduto, useProdutos } from '@/hooks/useProdutos'
 import { useCategorias } from '@/hooks/useCategorias'
 import { formatCurrency, formatPercent } from '@/lib/utils'
 import { ProdutoDialog } from './ProdutoDialog'
@@ -24,11 +25,14 @@ export default function Produtos() {
   const [catFiltro, setCatFiltro] = useState('todos')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
+  const [duplicateId, setDuplicateId] = useState<string | null>(null)
   const [fichaId, setFichaId] = useState<string | null>(null)
+  const [deleteProduto, setDeleteProduto] = useState<{ id: string; nome: string } | null>(null)
 
   const { data: produtos = [], isLoading } = useProdutos()
   const { data: categorias = [] } = useCategorias()
   const applyMarkup = useApplyProductMarkup()
+  const deleteMutation = useDeleteProduto()
 
   const filtrados = produtos.filter(p => {
     const mb = busca === '' || p.nome.toLowerCase().includes(busca.toLowerCase()) || (p.sku ?? '').toLowerCase().includes(busca.toLowerCase())
@@ -42,9 +46,14 @@ export default function Produtos() {
     ? produtos.reduce((s, p) => s + (p.margem_percentual ?? 0), 0) / produtos.length
     : 0
 
-  function openEdit(id: string) { setEditId(id); setDialogOpen(true) }
-  function openNew() { setEditId(null); setDialogOpen(true) }
-  function closeDialog() { setDialogOpen(false); setEditId(null) }
+  function openEdit(id: string) { setEditId(id); setDuplicateId(null); setDialogOpen(true) }
+  function openDuplicate(id: string) { setEditId(null); setDuplicateId(id); setDialogOpen(true) }
+  function openNew() { setEditId(null); setDuplicateId(null); setDialogOpen(true) }
+  function closeDialog() { setDialogOpen(false); setEditId(null); setDuplicateId(null) }
+  function handleDelete() {
+    if (!deleteProduto) return
+    deleteMutation.mutate(deleteProduto.id, { onSuccess: () => setDeleteProduto(null) })
+  }
 
   return (
     <div className="p-6 space-y-6 bg-ilunna-cream min-h-full">
@@ -180,6 +189,12 @@ export default function Produtos() {
                         <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-ilunna-muted hover:text-ilunna-terracotta" onClick={() => openEdit(p.id)}>
                           <Pencil className="w-3.5 h-3.5" />
                         </Button>
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-ilunna-muted hover:text-ilunna-terracotta" onClick={() => openDuplicate(p.id)} title="Duplicar produto">
+                          <Copy className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-ilunna-muted hover:text-red-500" onClick={() => setDeleteProduto({ id: p.id, nome: p.nome })}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -190,8 +205,27 @@ export default function Produtos() {
         </Table>
       </Card>
 
-      <ProdutoDialog open={dialogOpen} onClose={closeDialog} editId={editId} />
+      <ProdutoDialog open={dialogOpen} onClose={closeDialog} editId={editId} duplicateId={duplicateId} />
       {fichaId && <FichaTecnicaEditor open={!!fichaId} onClose={() => setFichaId(null)} produtoId={fichaId} />}
+
+      <Dialog open={!!deleteProduto} onOpenChange={(open: boolean) => { if (!open) setDeleteProduto(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-display text-ilunna-dark">Excluir produto?</DialogTitle>
+            <DialogDescription className="text-ilunna-muted">
+              Esta acao nao pode ser desfeita. O produto "{deleteProduto?.nome}" sera removido do cadastro.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteProduto(null)} className="border-ilunna-light">
+              Cancelar
+            </Button>
+            <Button onClick={handleDelete} className="bg-red-500 hover:bg-red-600 text-white" disabled={deleteMutation.isPending}>
+              {deleteMutation.isPending ? 'Excluindo...' : 'Excluir'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

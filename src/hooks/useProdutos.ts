@@ -138,6 +138,33 @@ export function useUpdateProduto() {
   })
 }
 
+export function useDeleteProduto() {
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('produtos').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['produtos'] })
+      queryClient.invalidateQueries({ queryKey: ['kit_itens'] })
+      toast({
+        title: 'Produto removido',
+        description: 'O produto foi excluído.',
+      })
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Erro ao remover produto',
+        description: error.message,
+        variant: 'destructive',
+      })
+    },
+  })
+}
+
 export function useApplyProductMarkup() {
   const queryClient = useQueryClient()
   const { toast } = useToast()

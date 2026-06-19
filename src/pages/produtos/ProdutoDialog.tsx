@@ -35,17 +35,42 @@ interface Props {
   open: boolean
   onClose: () => void
   editId: string | null
+  duplicateId?: string | null
 }
 
 const NONE = '__none__'
 
-export function ProdutoDialog({ open, onClose, editId }: Props) {
-  const { data: produto }    = useProduto(editId)
+function normalizeSku(value: string) {
+  return value
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+function uniqueSku(base: string, existingSkus: Array<string | null>) {
+  const used = new Set(existingSkus.filter(Boolean).map(s => s!.toUpperCase()))
+  const cleanBase = normalizeSku(base) || 'PRODUTO'
+  let candidate = cleanBase
+  let suffix = 2
+
+  while (used.has(candidate)) {
+    candidate = `${cleanBase}-${suffix}`
+    suffix += 1
+  }
+
+  return candidate
+}
+
+export function ProdutoDialog({ open, onClose, editId, duplicateId = null }: Props) {
+  const sourceId = editId ?? duplicateId
+  const { data: produto }    = useProduto(sourceId)
   const { data: categorias = [] } = useCategorias()
   const { data: insumosList = [] } = useInsumos()
   const { data: produtosList = [] } = useProdutos()
-  const { data: fichaExistente = [] } = useFichaTecnica(editId)
-  const { data: kitExistente = [] }   = useKitItens(editId)
+  const { data: fichaExistente = [] } = useFichaTecnica(sourceId)
+  const { data: kitExistente = [] }   = useKitItens(sourceId)
 
   const createProduto   = useCreateProduto()
   const updateProduto   = useUpdateProduto()
@@ -81,7 +106,21 @@ export function ProdutoDialog({ open, onClose, editId }: Props) {
         validade_dias: produto.validade_dias ?? undefined,
         ativo: produto.ativo,
       })
-    } else if (!editId) {
+    } else if (produto && duplicateId) {
+      const nomeCopia = `${produto.nome} copia`
+      const skuBase = `${produto.sku || toSKU(produto.nome)}-COPIA`
+      form.reset({
+        nome: nomeCopia,
+        sku: uniqueSku(skuBase, produtosList.map(p => p.sku)),
+        tipo: (produto.tipo as 'simples' | 'producao' | 'kit') ?? 'simples',
+        categoria_id: produto.categoria_id ?? NONE,
+        preco_venda: produto.preco_venda,
+        estoque_atual: 0,
+        estoque_minimo: produto.estoque_minimo,
+        validade_dias: produto.validade_dias ?? undefined,
+        ativo: produto.ativo,
+      })
+    } else if (!sourceId) {
       form.reset({
         nome: '', sku: '', tipo: 'simples', categoria_id: NONE,
         preco_venda: 0, estoque_atual: 0, estoque_minimo: 0,
@@ -90,36 +129,36 @@ export function ProdutoDialog({ open, onClose, editId }: Props) {
       setInsumoRows([])
       setKitRows([])
     }
-  }, [produto, editId, open])
+  }, [produto, editId, duplicateId, sourceId, open])
 
   // Load ficha técnica rows when editing a producao product or kit
   useEffect(() => {
-    if (editId) {
+    if (sourceId) {
       setInsumoRows(fichaExistente.map(f => ({
         insumo_id: f.insumo_id,
         quantidade: f.quantidade,
       })))
     }
-  }, [fichaExistente, editId])
+  }, [fichaExistente, sourceId])
 
   // Load kit rows when editing a kit product
   useEffect(() => {
-    if (editId) {
+    if (sourceId) {
       setKitRows(kitExistente.map(k => ({
         produto_id: k.produto_id,
         quantidade: k.quantidade,
         custo_unitario: k.custo_unitario,
       })))
     }
-  }, [kitExistente, editId])
+  }, [kitExistente, sourceId])
 
   // Auto-generate SKU from name (new products only)
   const nomeWatch = form.watch('nome')
   useEffect(() => {
-    if (!editId && nomeWatch) {
+    if (!editId && !duplicateId && nomeWatch) {
       form.setValue('sku', toSKU(nomeWatch))
     }
-  }, [nomeWatch, editId])
+  }, [nomeWatch, editId, duplicateId])
 
   // Live cost calculation
   const custoFicha = insumoRows.reduce((sum, row) => {
@@ -229,14 +268,14 @@ export function ProdutoDialog({ open, onClose, editId }: Props) {
     || saveFicha.isPending || saveKit.isPending
 
   // Produtos elegíveis para kit (exclude self and non-simples/producao)
-  const produtosParaKit = produtosList.filter(p => p.id !== editId)
+  const produtosParaKit = produtosList.filter(p => p.id !== sourceId)
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-ilunna-cream border-ilunna-light">
         <DialogHeader>
           <DialogTitle className="font-display text-xl text-ilunna-dark">
-            {editId ? 'Editar Produto' : 'Novo Produto'}
+            {editId ? 'Editar Produto' : duplicateId ? 'Duplicar Produto' : 'Novo Produto'}
           </DialogTitle>
         </DialogHeader>
 
