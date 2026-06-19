@@ -220,7 +220,19 @@ export function useSaveFichaTecnica() {
 
       if (deleteError) throw deleteError
 
-      if (items.length === 0) return []
+      if (items.length === 0) {
+        const { error: updateError } = await supabase
+          .from('produtos')
+          .update({
+            custo_producao: 0,
+            preco_venda: 0,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', produtoId)
+
+        if (updateError) throw updateError
+        return []
+      }
 
       // Fetch insumo custo_unitario for each item
       const insumoIds = items.map((i) => i.insumo_id)

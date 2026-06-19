@@ -92,26 +92,26 @@ export function ProdutoDialog({ open, onClose, editId }: Props) {
     }
   }, [produto, editId, open])
 
-  // Load ficha técnica rows when editing a producao product
+  // Load ficha técnica rows when editing a producao product or kit
   useEffect(() => {
-    if (fichaExistente.length > 0) {
+    if (editId) {
       setInsumoRows(fichaExistente.map(f => ({
         insumo_id: f.insumo_id,
         quantidade: f.quantidade,
       })))
     }
-  }, [fichaExistente])
+  }, [fichaExistente, editId])
 
   // Load kit rows when editing a kit product
   useEffect(() => {
-    if (kitExistente.length > 0) {
+    if (editId) {
       setKitRows(kitExistente.map(k => ({
         produto_id: k.produto_id,
         quantidade: k.quantidade,
         custo_unitario: k.custo_unitario,
       })))
     }
-  }, [kitExistente])
+  }, [kitExistente, editId])
 
   // Auto-generate SKU from name (new products only)
   const nomeWatch = form.watch('nome')
@@ -134,7 +134,7 @@ export function ProdutoDialog({ open, onClose, editId }: Props) {
   }, 0)
 
   const custoTotal = tipoWatch === 'producao' ? custoFicha
-                   : tipoWatch === 'kit'      ? custoKit
+                   : tipoWatch === 'kit'      ? custoKit + custoFicha
                    : produto?.custo_producao ?? 0
 
   const precoVenda = form.watch('preco_venda') ?? 0
@@ -204,14 +204,18 @@ export function ProdutoDialog({ open, onClose, editId }: Props) {
         const validRows = insumoRows.filter(r => r.insumo_id)
         await saveFicha.mutateAsync({ produtoId: savedId, items: validRows })
       } else if (data.tipo === 'kit') {
+        const validInsumos = insumoRows.filter(r => r.insumo_id)
+        await saveFicha.mutateAsync({ produtoId: savedId, items: validInsumos })
+
         const validRows = kitRows.filter(r => r.produto_id)
         await saveKit.mutateAsync({
           kitId: savedId,
           itens: validRows.map(r => ({
             produto_id: r.produto_id,
             quantidade: r.quantidade,
-            custo_unitario: r.custo_unitario,
+            custo_unitario: produtosList.find(p => p.id === r.produto_id)?.custo_producao ?? r.custo_unitario,
           })),
+          extraCusto: custoFicha,
         })
       }
 
@@ -247,7 +251,7 @@ export function ProdutoDialog({ open, onClose, editId }: Props) {
                   {([
                     { value: 'simples',  label: 'Simples',         icon: Package,      desc: 'Sem composição' },
                     { value: 'producao', label: 'Com Insumos',     icon: FlaskConical, desc: 'Ficha técnica' },
-                    { value: 'kit',      label: 'Kit',             icon: Layers,       desc: 'Outros produtos' },
+                    { value: 'kit',      label: 'Kit',             icon: Layers,       desc: 'Produtos e insumos' },
                   ] as const).map(opt => (
                     <button
                       key={opt.value}
@@ -370,53 +374,104 @@ export function ProdutoDialog({ open, onClose, editId }: Props) {
 
             {/* ── Composição do Kit (tipo = kit) ── */}
             {tipoWatch === 'kit' && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <FormLabel className="text-ilunna-brown">Produtos do Kit</FormLabel>
-                  <Button type="button" size="sm" variant="outline" onClick={addKitRow}
-                    className="h-7 text-xs gap-1 border-ilunna-light">
-                    <Plus className="w-3 h-3" /> Adicionar
-                  </Button>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <FormLabel className="text-ilunna-brown">Produtos do Kit</FormLabel>
+                    <Button type="button" size="sm" variant="outline" onClick={addKitRow}
+                      className="h-7 text-xs gap-1 border-ilunna-light">
+                      <Plus className="w-3 h-3" /> Adicionar
+                    </Button>
+                  </div>
+                  {kitRows.length === 0 && (
+                    <p className="text-xs text-ilunna-muted text-center py-3 border border-dashed border-ilunna-light rounded-xl">
+                      Nenhum produto adicionado
+                    </p>
+                  )}
+                  {kitRows.map((row, idx) => {
+                    const prod = produtosList.find(p => p.id === row.produto_id)
+                    const custoLinha = (prod?.custo_producao ?? 0) * row.quantidade
+                    return (
+                      <div key={idx} className="grid grid-cols-[1fr_100px_80px_28px] gap-2 items-center">
+                        <Select value={row.produto_id || NONE} onValueChange={v => updateKitRow(idx, 'produto_id', v === NONE ? '' : v)}>
+                          <SelectTrigger className="border-ilunna-light text-sm h-8">
+                            <SelectValue placeholder="Selecionar produto" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={NONE}>Selecionar...</SelectItem>
+                            {produtosParaKit.map(p => (
+                              <SelectItem key={p.id} value={p.id}>
+                                {p.nome}{p.sku ? ` (${p.sku})` : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number" step="1" min="1"
+                          value={row.quantidade}
+                          onChange={e => updateKitRow(idx, 'quantidade', parseInt(e.target.value) || 1)}
+                          className="border-ilunna-light text-sm h-8"
+                          placeholder="Qtd"
+                        />
+                        <span className="text-xs text-ilunna-muted text-right">{formatCurrency(custoLinha)}</span>
+                        <Button type="button" size="icon" variant="ghost"
+                          className="h-7 w-7 text-ilunna-muted hover:text-red-500"
+                          onClick={() => removeKitRow(idx)}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    )
+                  })}
                 </div>
-                {kitRows.length === 0 && (
-                  <p className="text-xs text-ilunna-muted text-center py-3 border border-dashed border-ilunna-light rounded-xl">
-                    Nenhum produto adicionado
-                  </p>
-                )}
-                {kitRows.map((row, idx) => {
-                  const prod = produtosList.find(p => p.id === row.produto_id)
-                  const custoLinha = (prod?.custo_producao ?? 0) * row.quantidade
-                  return (
-                    <div key={idx} className="grid grid-cols-[1fr_100px_80px_28px] gap-2 items-center">
-                      <Select value={row.produto_id || NONE} onValueChange={v => updateKitRow(idx, 'produto_id', v === NONE ? '' : v)}>
-                        <SelectTrigger className="border-ilunna-light text-sm h-8">
-                          <SelectValue placeholder="Selecionar produto" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={NONE}>Selecionar...</SelectItem>
-                          {produtosParaKit.map(p => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.nome}{p.sku ? ` (${p.sku})` : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="number" step="1" min="1"
-                        value={row.quantidade}
-                        onChange={e => updateKitRow(idx, 'quantidade', parseInt(e.target.value) || 1)}
-                        className="border-ilunna-light text-sm h-8"
-                        placeholder="Qtd"
-                      />
-                      <span className="text-xs text-ilunna-muted text-right">{formatCurrency(custoLinha)}</span>
-                      <Button type="button" size="icon" variant="ghost"
-                        className="h-7 w-7 text-ilunna-muted hover:text-red-500"
-                        onClick={() => removeKitRow(idx)}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  )
-                })}
+
+                <div className="space-y-2 border-t border-ilunna-light pt-3">
+                  <div className="flex items-center justify-between">
+                    <FormLabel className="text-ilunna-brown">Insumos do Kit</FormLabel>
+                    <Button type="button" size="sm" variant="outline" onClick={addInsumoRow}
+                      className="h-7 text-xs gap-1 border-ilunna-light">
+                      <Plus className="w-3 h-3" /> Adicionar
+                    </Button>
+                  </div>
+                  {insumoRows.length === 0 && (
+                    <p className="text-xs text-ilunna-muted text-center py-3 border border-dashed border-ilunna-light rounded-xl">
+                      Nenhum insumo adicionado
+                    </p>
+                  )}
+                  {insumoRows.map((row, idx) => {
+                    const ins = insumosList.find(i => i.id === row.insumo_id)
+                    const custoLinha = ins ? ins.custo_unitario * row.quantidade : 0
+                    return (
+                      <div key={idx} className="grid grid-cols-[1fr_100px_80px_28px] gap-2 items-center">
+                        <Select value={row.insumo_id || NONE} onValueChange={v => updateInsumoRow(idx, 'insumo_id', v === NONE ? '' : v)}>
+                          <SelectTrigger className="border-ilunna-light text-sm h-8">
+                            <SelectValue placeholder="Selecionar insumo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={NONE}>Selecionar...</SelectItem>
+                            {insumosList.map(i => (
+                              <SelectItem key={i.id} value={i.id}>
+                                {i.nome} ({i.unidade})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number" step="0.001" min="0"
+                          value={row.quantidade}
+                          onChange={e => updateInsumoRow(idx, 'quantidade', parseFloat(e.target.value) || 0)}
+                          className="border-ilunna-light text-sm h-8"
+                          placeholder="Qtd"
+                        />
+                        <span className="text-xs text-ilunna-muted text-right">{formatCurrency(custoLinha)}</span>
+                        <Button type="button" size="icon" variant="ghost"
+                          className="h-7 w-7 text-ilunna-muted hover:text-red-500"
+                          onClick={() => removeInsumoRow(idx)}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )}
 

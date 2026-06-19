@@ -27,9 +27,11 @@ export function useSaveKitItens() {
     mutationFn: async ({
       kitId,
       itens,
+      extraCusto = 0,
     }: {
       kitId: string
       itens: { produto_id: string; quantidade: number; custo_unitario: number }[]
+      extraCusto?: number
     }) => {
       // Delete existing items then re-insert
       const { error: delErr } = await supabase
@@ -39,11 +41,12 @@ export function useSaveKitItens() {
       if (delErr) throw delErr
 
       if (itens.length === 0) {
+        const custoProducao = extraCusto
         const { error: updateErr } = await supabase
           .from('produtos')
           .update({
-            custo_producao: 0,
-            preco_venda: 0,
+            custo_producao: custoProducao,
+            preco_venda: custoProducao > 0 ? custoProducao * PRODUCT_MARKUP : 0,
             updated_at: new Date().toISOString(),
           })
           .eq('id', kitId)
@@ -57,12 +60,12 @@ export function useSaveKitItens() {
         .select()
       if (error) throw error
 
-      const custoProducao = itens.reduce((sum, item) => sum + item.quantidade * item.custo_unitario, 0)
+      const custoProducao = itens.reduce((sum, item) => sum + item.quantidade * item.custo_unitario, 0) + extraCusto
       const { error: updateErr } = await supabase
         .from('produtos')
         .update({
           custo_producao: custoProducao,
-          preco_venda: custoProducao * PRODUCT_MARKUP,
+          preco_venda: custoProducao > 0 ? custoProducao * PRODUCT_MARKUP : 0,
           updated_at: new Date().toISOString(),
         })
         .eq('id', kitId)
