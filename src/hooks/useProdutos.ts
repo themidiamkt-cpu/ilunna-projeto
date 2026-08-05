@@ -2,13 +2,19 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/components/ui/use-toast'
 
-export const PRODUCT_MARKUP = 3
+export const DEFAULT_PRODUCT_MARKUP = 3
+export const PRODUCT_MARKUP = DEFAULT_PRODUCT_MARKUP
+
+export function calcPrecoComMarkup(custo: number, markup = DEFAULT_PRODUCT_MARKUP) {
+  return custo > 0 ? Number((custo * markup).toFixed(2)) : 0
+}
 
 export type ProdutoFormData = {
   nome: string
   sku?: string
   tipo?: 'simples' | 'producao' | 'kit'
   categoria_id?: string
+  markup?: number
   preco_venda: number
   estoque_atual: number
   estoque_minimo: number
@@ -64,6 +70,7 @@ export function useCreateProduto() {
           sku: formData.sku,
           tipo: formData.tipo ?? 'simples',
           categoria_id: formData.categoria_id || null,
+          markup: formData.markup ?? DEFAULT_PRODUCT_MARKUP,
           preco_venda: formData.preco_venda,
           estoque_atual: formData.estoque_atual,
           estoque_minimo: formData.estoque_minimo,
@@ -106,6 +113,7 @@ export function useUpdateProduto() {
           sku: formData.sku,
           tipo: formData.tipo,
           categoria_id: formData.categoria_id || null,
+          markup: formData.markup ?? DEFAULT_PRODUCT_MARKUP,
           preco_venda: formData.preco_venda,
           estoque_atual: formData.estoque_atual,
           estoque_minimo: formData.estoque_minimo,
@@ -173,7 +181,7 @@ export function useApplyProductMarkup() {
     mutationFn: async () => {
       const { data: produtos, error: selectError } = await supabase
         .from('produtos')
-        .select('id, custo_producao')
+        .select('id, custo_producao, markup')
         .gt('custo_producao', 0)
 
       if (selectError) throw selectError
@@ -182,7 +190,7 @@ export function useApplyProductMarkup() {
         supabase
           .from('produtos')
           .update({
-            preco_venda: Number((produto.custo_producao * PRODUCT_MARKUP).toFixed(2)),
+            preco_venda: calcPrecoComMarkup(produto.custo_producao, produto.markup ?? DEFAULT_PRODUCT_MARKUP),
             updated_at: new Date().toISOString(),
           })
           .eq('id', produto.id)
@@ -198,7 +206,7 @@ export function useApplyProductMarkup() {
       queryClient.invalidateQueries({ queryKey: ['produtos'] })
       toast({
         title: 'Markup aplicado',
-        description: `${count} produto${count === 1 ? '' : 's'} atualizado${count === 1 ? '' : 's'} com markup ${PRODUCT_MARKUP}.`,
+        description: `${count} produto${count === 1 ? '' : 's'} atualizado${count === 1 ? '' : 's'} com o markup de cada cadastro.`,
       })
     },
     onError: (error: Error) => {
@@ -235,9 +243,11 @@ export function useSaveFichaTecnica() {
     mutationFn: async ({
       produtoId,
       items,
+      markup,
     }: {
       produtoId: string
       items: FichaTecnicaItem[]
+      markup?: number
     }) => {
       // Delete all existing lines for this product
       const { error: deleteError } = await supabase
@@ -247,12 +257,21 @@ export function useSaveFichaTecnica() {
 
       if (deleteError) throw deleteError
 
+      const { data: produto } = await supabase
+        .from('produtos')
+        .select('markup')
+        .eq('id', produtoId)
+        .single()
+
+      const productMarkup = markup ?? produto?.markup ?? DEFAULT_PRODUCT_MARKUP
+
       if (items.length === 0) {
         const { error: updateError } = await supabase
           .from('produtos')
           .update({
             custo_producao: 0,
             preco_venda: 0,
+            markup: productMarkup,
             updated_at: new Date().toISOString(),
           })
           .eq('id', produtoId)
@@ -291,21 +310,12 @@ export function useSaveFichaTecnica() {
 
       // Recalculate produto custo_producao via RPC or direct update
       const custoProducao = rows.reduce((sum, r) => sum + r.custo_linha, 0)
-      const { data: produto } = await supabase
-        .from('produtos')
-        .select('preco_venda')
-        .eq('id', produtoId)
-        .single()
-
-      const precoVenda = produto?.preco_venda ?? 0
-      const margemValor = precoVenda - custoProducao
-      const margemPercentual = precoVenda > 0 ? (margemValor / precoVenda) * 100 : 0
-
       await supabase
         .from('produtos')
         .update({
           custo_producao: custoProducao,
-          preco_venda: custoProducao * PRODUCT_MARKUP,
+          preco_venda: calcPrecoComMarkup(custoProducao, productMarkup),
+          markup: productMarkup,
           updated_at: new Date().toISOString(),
         })
         .eq('id', produtoId)

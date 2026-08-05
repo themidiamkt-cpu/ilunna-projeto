@@ -45,9 +45,9 @@ export interface Database {
         Relationships: []
       }
       produtos: {
-        Row: { id: string; nome: string; sku: string | null; tipo: "simples" | "producao" | "kit"; categoria_id: string | null; preco_venda: number; custo_producao: number; margem_valor: number | null; margem_percentual: number | null; estoque_atual: number; estoque_minimo: number; validade_dias: number | null; imagem_url: string | null; ativo: boolean; created_at: string; updated_at: string }
-        Insert: { id?: string; nome: string; sku?: string | null; tipo?: "simples" | "producao" | "kit"; categoria_id?: string | null; preco_venda?: number; custo_producao?: number; estoque_atual?: number; estoque_minimo?: number; validade_dias?: number | null; imagem_url?: string | null; ativo?: boolean }
-        Update: { id?: string; nome?: string; sku?: string | null; tipo?: "simples" | "producao" | "kit"; categoria_id?: string | null; preco_venda?: number; custo_producao?: number; estoque_atual?: number; estoque_minimo?: number; validade_dias?: number | null; imagem_url?: string | null; ativo?: boolean; updated_at?: string }
+        Row: { id: string; nome: string; sku: string | null; tipo: "simples" | "producao" | "kit"; categoria_id: string | null; markup: number; preco_venda: number; custo_producao: number; margem_valor: number | null; margem_percentual: number | null; estoque_atual: number; estoque_minimo: number; validade_dias: number | null; imagem_url: string | null; ativo: boolean; created_at: string; updated_at: string }
+        Insert: { id?: string; nome: string; sku?: string | null; tipo?: "simples" | "producao" | "kit"; categoria_id?: string | null; markup?: number; preco_venda?: number; custo_producao?: number; estoque_atual?: number; estoque_minimo?: number; validade_dias?: number | null; imagem_url?: string | null; ativo?: boolean }
+        Update: { id?: string; nome?: string; sku?: string | null; tipo?: "simples" | "producao" | "kit"; categoria_id?: string | null; markup?: number; preco_venda?: number; custo_producao?: number; estoque_atual?: number; estoque_minimo?: number; validade_dias?: number | null; imagem_url?: string | null; ativo?: boolean; updated_at?: string }
         Relationships: []
       }
       kit_itens: {
@@ -95,7 +95,7 @@ export interface Database {
     }
     Views: {
       vw_margem_produtos: {
-        Row: { id: string; nome: string; sku: string | null; categoria: string | null; categoria_cor: string | null; preco_venda: number; custo_producao: number; margem_valor: number | null; margem_percentual: number | null; estoque_atual: number; estoque_minimo: number; ativo: boolean }
+        Row: { id: string; nome: string; sku: string | null; categoria: string | null; categoria_cor: string | null; markup: number; preco_venda: number; custo_producao: number; margem_valor: number | null; margem_percentual: number | null; estoque_atual: number; estoque_minimo: number; ativo: boolean }
         Relationships: []
       }
       vw_estoque_baixo: {

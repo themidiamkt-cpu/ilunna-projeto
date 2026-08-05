@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { PRODUCT_MARKUP } from '@/hooks/useProdutos'
+import { DEFAULT_PRODUCT_MARKUP, calcPrecoComMarkup } from '@/hooks/useProdutos'
 import { useToast } from '@/components/ui/use-toast'
 import type { KitItemComProduto } from '@/types/database.types'
 
@@ -31,11 +31,21 @@ export function useSaveKitItens() {
       kitId,
       itens,
       extraCusto = 0,
+      markup,
     }: {
       kitId: string
       itens: { produto_id: string; quantidade: number; custo_unitario: number }[]
       extraCusto?: number
+      markup?: number
     }) => {
+      const { data: kitProduto } = await supabase
+        .from('produtos')
+        .select('markup')
+        .eq('id', kitId)
+        .single()
+
+      const productMarkup = markup ?? kitProduto?.markup ?? DEFAULT_PRODUCT_MARKUP
+
       // Delete existing items then re-insert
       const { error: delErr } = await supabase
         .from('kit_itens')
@@ -49,7 +59,8 @@ export function useSaveKitItens() {
           .from('produtos')
           .update({
             custo_producao: custoProducao,
-            preco_venda: custoProducao > 0 ? custoProducao * PRODUCT_MARKUP : 0,
+            preco_venda: calcPrecoComMarkup(custoProducao, productMarkup),
+            markup: productMarkup,
             updated_at: new Date().toISOString(),
           })
           .eq('id', kitId)
@@ -68,7 +79,8 @@ export function useSaveKitItens() {
         .from('produtos')
         .update({
           custo_producao: custoProducao,
-          preco_venda: custoProducao > 0 ? custoProducao * PRODUCT_MARKUP : 0,
+          preco_venda: calcPrecoComMarkup(custoProducao, productMarkup),
+          markup: productMarkup,
           updated_at: new Date().toISOString(),
         })
         .eq('id', kitId)

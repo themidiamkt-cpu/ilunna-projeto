@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { PRODUCT_MARKUP, useProduto, useProdutos, useCreateProduto, useUpdateProduto, useFichaTecnica, useSaveFichaTecnica } from '@/hooks/useProdutos'
+import { DEFAULT_PRODUCT_MARKUP, calcPrecoComMarkup, useProduto, useProdutos, useCreateProduto, useUpdateProduto, useFichaTecnica, useSaveFichaTecnica } from '@/hooks/useProdutos'
 import { useCategorias } from '@/hooks/useCategorias'
 import { useInsumos } from '@/hooks/useInsumos'
 import { useKitItens, useSaveKitItens } from '@/hooks/useKitItens'
@@ -20,6 +20,7 @@ const schema = z.object({
   sku: z.string().optional(),
   tipo: z.enum(['simples', 'producao', 'kit']),
   categoria_id: z.string().optional(),
+  markup: z.coerce.number().min(0.01, 'Markup inválido'),
   preco_venda: z.coerce.number().min(0, 'Preço inválido'),
   estoque_atual: z.coerce.number().min(0),
   estoque_minimo: z.coerce.number().min(0),
@@ -85,7 +86,7 @@ export function ProdutoDialog({ open, onClose, editId, duplicateId = null }: Pro
     resolver: zodResolver(schema),
     defaultValues: {
       nome: '', sku: '', tipo: 'simples', categoria_id: NONE,
-      preco_venda: 0, estoque_atual: 0, estoque_minimo: 0,
+      markup: DEFAULT_PRODUCT_MARKUP, preco_venda: 0, estoque_atual: 0, estoque_minimo: 0,
       validade_dias: undefined, ativo: true,
     },
   })
@@ -100,6 +101,7 @@ export function ProdutoDialog({ open, onClose, editId, duplicateId = null }: Pro
         sku: produto.sku ?? '',
         tipo: (produto.tipo as 'simples' | 'producao' | 'kit') ?? 'simples',
         categoria_id: produto.categoria_id ?? NONE,
+        markup: produto.markup ?? DEFAULT_PRODUCT_MARKUP,
         preco_venda: produto.preco_venda,
         estoque_atual: produto.estoque_atual,
         estoque_minimo: produto.estoque_minimo,
@@ -114,6 +116,7 @@ export function ProdutoDialog({ open, onClose, editId, duplicateId = null }: Pro
         sku: uniqueSku(skuBase, produtosList.map(p => p.sku)),
         tipo: (produto.tipo as 'simples' | 'producao' | 'kit') ?? 'simples',
         categoria_id: produto.categoria_id ?? NONE,
+        markup: produto.markup ?? DEFAULT_PRODUCT_MARKUP,
         preco_venda: produto.preco_venda,
         estoque_atual: 0,
         estoque_minimo: produto.estoque_minimo,
@@ -123,7 +126,7 @@ export function ProdutoDialog({ open, onClose, editId, duplicateId = null }: Pro
     } else if (!sourceId) {
       form.reset({
         nome: '', sku: '', tipo: 'simples', categoria_id: NONE,
-        preco_venda: 0, estoque_atual: 0, estoque_minimo: 0,
+        markup: DEFAULT_PRODUCT_MARKUP, preco_venda: 0, estoque_atual: 0, estoque_minimo: 0,
         ativo: true,
       })
       setInsumoRows([])
@@ -177,12 +180,13 @@ export function ProdutoDialog({ open, onClose, editId, duplicateId = null }: Pro
                    : produto?.custo_producao ?? 0
 
   const precoVenda = form.watch('preco_venda') ?? 0
+  const markupWatch = form.watch('markup') ?? DEFAULT_PRODUCT_MARKUP
   const margem     = precoVenda > 0 ? ((precoVenda - custoTotal) / precoVenda) * 100 : 0
 
   useEffect(() => {
     if (custoTotal <= 0) return
-    form.setValue('preco_venda', Number((custoTotal * PRODUCT_MARKUP).toFixed(2)))
-  }, [custoTotal, form])
+    form.setValue('preco_venda', calcPrecoComMarkup(custoTotal, markupWatch))
+  }, [custoTotal, markupWatch, form])
 
   // ---- Insumo row helpers ----
   function addInsumoRow() {
@@ -220,6 +224,7 @@ export function ProdutoDialog({ open, onClose, editId, duplicateId = null }: Pro
       sku: data.sku || undefined,
       tipo: data.tipo,
       categoria_id: (data.categoria_id && data.categoria_id !== NONE) ? data.categoria_id : undefined,
+      markup: data.markup,
       preco_venda: data.preco_venda,
       estoque_atual: data.estoque_atual,
       estoque_minimo: data.estoque_minimo,
@@ -241,10 +246,10 @@ export function ProdutoDialog({ open, onClose, editId, duplicateId = null }: Pro
       // Save inline composition depending on tipo
       if (data.tipo === 'producao') {
         const validRows = insumoRows.filter(r => r.insumo_id)
-        await saveFicha.mutateAsync({ produtoId: savedId, items: validRows })
+        await saveFicha.mutateAsync({ produtoId: savedId, items: validRows, markup: data.markup })
       } else if (data.tipo === 'kit') {
         const validInsumos = insumoRows.filter(r => r.insumo_id)
-        await saveFicha.mutateAsync({ produtoId: savedId, items: validInsumos })
+        await saveFicha.mutateAsync({ produtoId: savedId, items: validInsumos, markup: data.markup })
 
         const validRows = kitRows.filter(r => r.produto_id)
         await saveKit.mutateAsync({
@@ -255,6 +260,7 @@ export function ProdutoDialog({ open, onClose, editId, duplicateId = null }: Pro
             custo_unitario: produtosList.find(p => p.id === r.produto_id)?.custo_producao ?? r.custo_unitario,
           })),
           extraCusto: custoFicha,
+          markup: data.markup,
         })
       }
 
@@ -342,22 +348,39 @@ export function ProdutoDialog({ open, onClose, editId, duplicateId = null }: Pro
               )} />
             </div>
 
-            <FormField control={form.control} name="preco_venda" render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-ilunna-brown">Preço de Venda (R$) - markup {PRODUCT_MARKUP}</FormLabel>
-                <FormControl>
-                  <Input
-                    {...field}
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    readOnly={custoTotal > 0}
-                    className={`border-ilunna-light ${custoTotal > 0 ? 'bg-ilunna-light/50' : ''}`}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
+            <div className="grid grid-cols-[160px_1fr] gap-3">
+              <FormField control={form.control} name="markup" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-ilunna-brown">Markup</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      type="number"
+                      step="0.1"
+                      min="0.01"
+                      className="border-ilunna-light"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="preco_venda" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-ilunna-brown">Preço de Venda (R$)</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      readOnly={custoTotal > 0}
+                      className={`border-ilunna-light ${custoTotal > 0 ? 'bg-ilunna-light/50' : ''}`}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </div>
 
             {/* ── Ficha Técnica (tipo = producao) ── */}
             {tipoWatch === 'producao' && (

@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { PRODUCT_MARKUP, useApplyProductMarkup, useDeleteProduto, useProdutos } from '@/hooks/useProdutos'
+import { DEFAULT_PRODUCT_MARKUP, useApplyProductMarkup, useDeleteProduto, useProdutos } from '@/hooks/useProdutos'
 import { useCategorias } from '@/hooks/useCategorias'
 import { formatCurrency, formatPercent } from '@/lib/utils'
 import { ProdutoDialog } from './ProdutoDialog'
@@ -71,7 +71,7 @@ export default function Produtos() {
             disabled={applyMarkup.isPending}
           >
             <Calculator className="w-4 h-4" />
-            {applyMarkup.isPending ? 'Aplicando...' : `Markup ${PRODUCT_MARKUP}`}
+            {applyMarkup.isPending ? 'Aplicando...' : 'Aplicar markup'}
           </Button>
           <Button className="bg-ilunna-terracotta hover:bg-ilunna-brown text-white gap-2" onClick={openNew}>
             <Plus className="w-4 h-4" /> Novo Produto
@@ -130,6 +130,7 @@ export default function Produtos() {
               <TableHead className="text-ilunna-muted font-medium">Categoria</TableHead>
               <TableHead className="text-ilunna-muted font-medium">Preço Venda</TableHead>
               <TableHead className="text-ilunna-muted font-medium">Custo Prod.</TableHead>
+              <TableHead className="text-ilunna-muted font-medium">Markup</TableHead>
               <TableHead className="text-ilunna-muted font-medium">Margem</TableHead>
               <TableHead className="text-ilunna-muted font-medium">Estoque</TableHead>
               <TableHead className="text-ilunna-muted font-medium">Status</TableHead>
@@ -139,11 +140,11 @@ export default function Produtos() {
           <TableBody>
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}><TableCell colSpan={8}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
+                <TableRow key={i}><TableCell colSpan={9}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
               ))
             ) : filtrados.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-12">
+                <TableCell colSpan={9} className="text-center py-12">
                   <div className="flex flex-col items-center gap-2 text-ilunna-muted">
                     <Package className="w-10 h-10 opacity-30" />
                     <p className="font-medium">Nenhum produto encontrado</p>
@@ -171,6 +172,7 @@ export default function Produtos() {
                     </TableCell>
                     <TableCell className="font-medium text-ilunna-dark">{formatCurrency(p.preco_venda)}</TableCell>
                     <TableCell className="text-ilunna-muted">{formatCurrency(p.custo_producao)}</TableCell>
+                    <TableCell className="text-ilunna-muted">x{(p.markup ?? DEFAULT_PRODUCT_MARKUP).toLocaleString('pt-BR')}</TableCell>
                     <TableCell><MargemBadge pct={p.margem_percentual} /></TableCell>
                     <TableCell>
                       <span className={`font-medium ${baixo ? 'text-amber-600' : 'text-ilunna-dark'}`}>{p.estoque_atual}</span>
